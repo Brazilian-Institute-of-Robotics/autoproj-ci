@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'autoproj/cli/inspection_tool'
 require 'tmpdir'
 
@@ -10,19 +12,36 @@ module Autoproj
         # same pattern, and registers its subcommand in {MainCI} while implementing
         # the functionality in this class
         class CI < InspectionTool
+            PHASES = %w[import build test].freeze
+
             def resolve_packages
                 initialize_and_load
                 source_packages, * = finalize_setup(
-                    [], non_imported_packages: :ignore)
+                    [], non_imported_packages: :ignore
+                )
                 source_packages.map do |pkg_name|
                     ws.manifest.find_autobuild_package(pkg_name)
+                end
+            end
+
+            def cache_state(dir, ignore: [])
+                packages = resolve_packages
+
+                memo = {}
+                packages.each_with_object({}) do |pkg, h|
+                    state = package_cache_state(dir, pkg, memo: memo)
+                    if ignore.include?(pkg.name)
+                        state = state.merge('cached' => false, 'metadata' => false)
+                    end
+
+                    h[pkg.name] = state
                 end
             end
 
             def cache_pull(dir, ignore: [], silent: true)
                 packages = resolve_packages
 
-                memo   = Hash.new
+                memo = {}
                 results = packages.each_with_object({}) do |pkg, h|
                     if ignore.include?(pkg.name)
                         fingerprint = pkg.fingerprint(memo: memo)
@@ -33,7 +52,12 @@ module Autoproj
                         next
                     end
 
+<<<<<<< HEAD
                     state, fingerprint, metadata = pull_package_from_cache(dir, pkg, memo: memo)
+=======
+                    state, fingerprint, metadata =
+                        pull_package_from_cache(dir, pkg, memo: memo)
+>>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                     puts "pulled #{pkg.name} (#{fingerprint})" if state && !silent
 
                     h[pkg.name] = metadata.merge(
@@ -50,10 +74,11 @@ module Autoproj
                 results
             end
 
-            def cache_push(dir, force: [], silent: true)
+            def cache_push(dir, silent: true)
                 packages = resolve_packages
                 metadata = consolidated_report['packages']
 
+<<<<<<< HEAD
                 memo   = Hash.new
                 results = packages.each_with_object({}) do |pkg, h|
                     next unless (pkg_metadata = metadata[pkg.name])
@@ -62,6 +87,23 @@ module Autoproj
                     state, fingerprint = push_package_to_cache(
                         dir, pkg, pkg_metadata,
                         force: force.include?(pkg.name), memo: memo)
+=======
+                memo = {}
+                results = packages.each_with_object({}) do |pkg, h|
+                    next unless (pkg_metadata = metadata[pkg.name])
+                    next unless (build_info = pkg_metadata['build'])
+                    next if build_info['cached'] || !build_info['success']
+
+                    # Remove cached flags before saving
+                    pkg_metadata = pkg_metadata.dup
+                    PHASES.each do |phase_name|
+                        pkg_metadata[phase_name]&.delete('cached')
+                    end
+
+                    state, fingerprint = push_package_to_cache(
+                        dir, pkg, pkg_metadata, force: true, memo: memo
+                    )
+>>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                     puts "pushed #{pkg.name} (#{fingerprint})" if state && !silent
 
                     h[pkg.name] = {
@@ -78,11 +120,58 @@ module Autoproj
                 results
             end
 
+            # Checks if a package's test results should be processed with xunit-viewer
+            #
+            # @param [String] results_dir the directory where the
+            # @param [String] xunit_output path to the xunit-viewer output. An
+            #   existing file is re-generated only if force is true
+            # @param [Boolean] force re-generation of the xunit-viewer output
+            def need_xunit_processing?(results_dir, xunit_output, force: false)
+                # We don't re-generate if the xunit-processed files were cached
+                return if !force && File.file?(xunit_output)
+
+                # We only check whether there are xml files in the
+                # package's test dir. That's the only check we do ... if
+                # the XML files are not JUnit, we'll finish with an empty
+                # xunit html file
+                Dir.enum_for(:glob, File.join(results_dir, '*.xml'))
+                   .first
+            end
+
+            # Process the package's test results with xunit-viewer
+            #
+            # @param [String] xunit_viewer path to xunit-viewer
+            # @param [Boolean] force re-generation of the xunit-viewer output. If
+            #   false, packages that already have a xunit-viewer output will be skipped
+            def process_test_results_xunit(force: false, xunit_viewer: 'xunit-viewer')
+                consolidated_report['packages'].each_value do |info|
+                    next unless info['test']
+                    next unless (results_dir = info['test']['target_dir'])
+
+                    xunit_output = "#{results_dir}.html"
+                    next unless need_xunit_processing?(results_dir, xunit_output,
+                                                       force: force)
+
+                    success = system(xunit_viewer,
+                                     "--results=#{results_dir}",
+                                     "--output=#{xunit_output}")
+                    unless success
+                        Autoproj.warn 'xunit-viewer conversion failed '\
+                                      "for '#{results_dir}'"
+                    end
+                end
+            end
+
+            # Post-processing of test results
+            def process_test_results(force: false, xunit_viewer: 'xunit-viewer')
+                process_test_results_xunit(force: force, xunit_viewer: xunit_viewer)
+            end
+
             # Build a report in a given directory
             #
             # The method itself will not archive the directory, only gather the
             # information in a consistent way
-            def build_report(dir)
+            def create_report(dir)
                 initialize_and_load
                 finalize_setup([], non_imported_packages: :ignore)
 
@@ -92,9 +181,10 @@ module Autoproj
                     JSON.dump(report, io)
                 end
 
-                installation_manifest = InstallationManifest.
-                    from_workspace_root(@ws.root_dir)
+                installation_manifest = InstallationManifest
+                                        .from_workspace_root(@ws.root_dir)
                 logs = File.join(dir, 'logs')
+
                 # Pre-create the logs, or cp_r will have a different behavior
                 # if the directory exists or not
                 FileUtils.mkdir_p logs
@@ -109,12 +199,41 @@ module Autoproj
                 File.join(dir, pkg.name, fingerprint)
             end
 
+            def package_cache_state(dir, pkg, memo: {})
+                fingerprint = pkg.fingerprint(memo: memo)
+                path = package_cache_path(dir, pkg, fingerprint: fingerprint, memo: memo)
+
+                {
+                    'path' => path,
+                    'cached' => File.file?(path),
+                    'metadata' => File.file?("#{path}.json"),
+                    'fingerprint' => fingerprint
+                }
+            end
+
             def pull_package_from_cache(dir, pkg, memo: {})
                 fingerprint = pkg.fingerprint(memo: memo)
                 path = package_cache_path(dir, pkg, fingerprint: fingerprint, memo: memo)
+<<<<<<< HEAD
                 unless File.file?(path)
                     return [false, fingerprint, {}]
                 end
+=======
+                return [false, fingerprint, {}] unless File.file?(path)
+
+                metadata_path = "#{path}.json"
+                metadata =
+                    if File.file?(metadata_path)
+                        JSON.parse(File.read(metadata_path))
+                    else
+                        {}
+                    end
+
+                # Do not pull packages for which we should run tests
+                tests_enabled = pkg.test_utility.enabled?
+                tests_invoked = metadata['test'] && metadata['test']['invoked']
+                return [false, fingerprint, metadata] if tests_enabled && !tests_invoked
+>>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
 
                 path = package_cache_path(dir, pkg, fingerprint: fingerprint, memo: memo)
 
@@ -124,11 +243,18 @@ module Autoproj
                 metadata ||= {}
 
                 FileUtils.mkdir_p pkg.prefix
+<<<<<<< HEAD
                 result = system("tar", "xzf", path, chdir: pkg.prefix, out: '/dev/null')
                 unless result
                     raise "tar failed when pulling cache file for #{pkg.name}"
                 end
                 [true, pkg.fingerprint(memo: memo), metadata]
+=======
+                result = system('tar', 'xzf', path, chdir: pkg.prefix, out: '/dev/null')
+                raise "tar failed when pulling cache file for #{pkg.name}" unless result
+
+                [true, fingerprint, metadata]
+>>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
             end
 
             def push_package_to_cache(dir, pkg, metadata, force: false, memo: {})
@@ -137,6 +263,7 @@ module Autoproj
                 temppath = "#{path}.#{Process.pid}.#{rand(256)}"
 
                 FileUtils.mkdir_p File.dirname(path)
+<<<<<<< HEAD
                 unless File.file?("#{path}.yml")
                     File.open(temppath, 'w') { |io| YAML.dump(metadata, io) }
                     FileUtils.mv temppath, "#{path}.yml"
@@ -151,6 +278,19 @@ module Autoproj
                 unless result
                     raise "tar failed when pushing cache file for #{pkg.name}"
                 end
+=======
+                if force || !File.file?("#{path}.json")
+                    File.open(temppath, 'w') { |io| JSON.dump(metadata, io) }
+                    FileUtils.mv temppath, "#{path}.json"
+                end
+
+                return [false, fingerprint] if !force && File.file?(path)
+
+                result = system('tar', 'czf', temppath, '.',
+                                chdir: pkg.prefix, out: '/dev/null')
+                raise "tar failed when pushing cache file for #{pkg.name}" unless result
+
+>>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                 FileUtils.mv temppath, path
 
                 [true, fingerprint]
@@ -160,14 +300,21 @@ module Autoproj
                 path = @ws.build_report_path
                 return {} unless File.file?(path)
 
-                report = JSON.load(File.read(path))
-                report['build_report']['packages'].
-                    each_with_object({}) do |pkg_report, h|
+                report = JSON.parse(File.read(path))
+                report['build_report']['packages']
+                    .each_with_object({}) do |pkg_report, h|
                         h[pkg_report['name']] = pkg_report['built']
                     end
             end
 
+            def load_report(path, root_name, default: { 'packages' => {} })
+                return default unless File.file?(path)
+
+                JSON.parse(File.read(path)).fetch(root_name)
+            end
+
             def consolidated_report
+<<<<<<< HEAD
                 cache_pull_report = File.join(@ws.root_dir, 'cache-pull.json')
                 cache_report = if File.file?(cache_pull_report)
                     JSON.load(File.read(cache_pull_report))
@@ -206,9 +353,44 @@ module Autoproj
                     pkg_info['cached'] ||= false
                 end
 
+=======
+                # NOTE: keys must match PHASES
+                new_reports = {
+                    'import' => @ws.import_report_path,
+                    'build' => @ws.build_report_path,
+                    'test' => @ws.utility_report_path('test')
+                }
+
+                # We start with the cached info (if any) and override with
+                # information from the other phase reports
+                cache_report_path = File.join(@ws.root_dir, 'cache-pull.json')
+                result = load_report(cache_report_path, 'cache_pull_report')['packages']
+                result.delete_if do |_name, info|
+                    next(true) unless info.delete('cached')
+
+                    PHASES.each do |phase_name|
+                        if (phase_info = info[phase_name])
+                            phase_info['cached'] = true
+                        end
+                    end
+                    false
+                end
+
+                new_reports.each do |phase_name, path|
+                    report = load_report(path, "#{phase_name}_report")
+                    report['packages'].each do |pkg_name, pkg_info|
+                        result[pkg_name] ||= {}
+                        if pkg_info['invoked']
+                            result[pkg_name][phase_name] = pkg_info.merge(
+                                'cached' => false,
+                                'timestamp' => report['timestamp']
+                            )
+                        end
+                    end
+                end
+>>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                 { 'packages' => result }
             end
         end
     end
 end
-

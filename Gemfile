@@ -1,6 +1,7 @@
 source "https://rubygems.org"
 
-gem 'autoproj', git: 'https://github.com/rock-core/autoproj'
+gem 'autoproj', git: 'https://github.com/rock-core/autoproj', branch: 'merged_all_ci_prs'
+gem 'autobuild', git: 'https://github.com/rock-core/autobuild', branch: 'merged_all_ci_prs'
 group :vscode do
     gem 'pry'
     gem 'pry-byebug'
@@ -8,6 +9,7 @@ group :vscode do
     gem 'ruby-debug-ide', '>= 0.6.0'
     gem 'debase', '>= 0.2.2.beta10'
     gem 'solargraph'
+    gem 'rubocop-rock'
 end
 
 git_source(:github) {|repo_name| "https://github.com/#{repo_name}" }
