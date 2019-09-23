@@ -173,7 +173,8 @@ module Autoproj
                 # Pre-create the logs, or cp_r will have a different behavior
                 # if the directory exists or not
                 FileUtils.mkdir_p logs
-                installation_manifest.each_package do |pkg|
+                ws.manifest.each_package_definition.find_all do |pkg_def|
+                    pkg = ws.manifest.find_autobuild_package(pkg_def.name)
                     glob = Dir.glob(File.join(pkg.logdir, '*'))
                     FileUtils.cp_r(glob, logs) if File.directory?(pkg.logdir)
                 end
