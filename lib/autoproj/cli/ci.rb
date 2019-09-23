@@ -52,12 +52,8 @@ module Autoproj
                         next
                     end
 
-<<<<<<< HEAD
-                    state, fingerprint, metadata = pull_package_from_cache(dir, pkg, memo: memo)
-=======
                     state, fingerprint, metadata =
                         pull_package_from_cache(dir, pkg, memo: memo)
->>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                     puts "pulled #{pkg.name} (#{fingerprint})" if state && !silent
 
                     h[pkg.name] = metadata.merge(
@@ -78,16 +74,6 @@ module Autoproj
                 packages = resolve_packages
                 metadata = consolidated_report['packages']
 
-<<<<<<< HEAD
-                memo   = Hash.new
-                results = packages.each_with_object({}) do |pkg, h|
-                    next unless (pkg_metadata = metadata[pkg.name])
-                    next unless pkg_metadata['built']
-
-                    state, fingerprint = push_package_to_cache(
-                        dir, pkg, pkg_metadata,
-                        force: force.include?(pkg.name), memo: memo)
-=======
                 memo = {}
                 results = packages.each_with_object({}) do |pkg, h|
                     next unless (pkg_metadata = metadata[pkg.name])
@@ -103,7 +89,6 @@ module Autoproj
                     state, fingerprint = push_package_to_cache(
                         dir, pkg, pkg_metadata, force: true, memo: memo
                     )
->>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                     puts "pushed #{pkg.name} (#{fingerprint})" if state && !silent
 
                     h[pkg.name] = {
@@ -214,11 +199,6 @@ module Autoproj
             def pull_package_from_cache(dir, pkg, memo: {})
                 fingerprint = pkg.fingerprint(memo: memo)
                 path = package_cache_path(dir, pkg, fingerprint: fingerprint, memo: memo)
-<<<<<<< HEAD
-                unless File.file?(path)
-                    return [false, fingerprint, {}]
-                end
-=======
                 return [false, fingerprint, {}] unless File.file?(path)
 
                 metadata_path = "#{path}.json"
@@ -233,7 +213,6 @@ module Autoproj
                 tests_enabled = pkg.test_utility.enabled?
                 tests_invoked = metadata['test'] && metadata['test']['invoked']
                 return [false, fingerprint, metadata] if tests_enabled && !tests_invoked
->>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
 
                 path = package_cache_path(dir, pkg, fingerprint: fingerprint, memo: memo)
 
@@ -243,18 +222,10 @@ module Autoproj
                 metadata ||= {}
 
                 FileUtils.mkdir_p pkg.prefix
-<<<<<<< HEAD
-                result = system("tar", "xzf", path, chdir: pkg.prefix, out: '/dev/null')
-                unless result
-                    raise "tar failed when pulling cache file for #{pkg.name}"
-                end
-                [true, pkg.fingerprint(memo: memo), metadata]
-=======
                 result = system('tar', 'xzf', path, chdir: pkg.prefix, out: '/dev/null')
                 raise "tar failed when pulling cache file for #{pkg.name}" unless result
 
                 [true, fingerprint, metadata]
->>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
             end
 
             def push_package_to_cache(dir, pkg, metadata, force: false, memo: {})
@@ -263,22 +234,6 @@ module Autoproj
                 temppath = "#{path}.#{Process.pid}.#{rand(256)}"
 
                 FileUtils.mkdir_p File.dirname(path)
-<<<<<<< HEAD
-                unless File.file?("#{path}.yml")
-                    File.open(temppath, 'w') { |io| YAML.dump(metadata, io) }
-                    FileUtils.mv temppath, "#{path}.yml"
-                end
-
-                if !force && File.file?(path)
-                    return [false, fingerprint]
-                end
-
-                result = system("tar", "czf", temppath, ".",
-                    chdir: pkg.prefix, out: '/dev/null')
-                unless result
-                    raise "tar failed when pushing cache file for #{pkg.name}"
-                end
-=======
                 if force || !File.file?("#{path}.json")
                     File.open(temppath, 'w') { |io| JSON.dump(metadata, io) }
                     FileUtils.mv temppath, "#{path}.json"
@@ -290,7 +245,6 @@ module Autoproj
                                 chdir: pkg.prefix, out: '/dev/null')
                 raise "tar failed when pushing cache file for #{pkg.name}" unless result
 
->>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                 FileUtils.mv temppath, path
 
                 [true, fingerprint]
@@ -314,46 +268,6 @@ module Autoproj
             end
 
             def consolidated_report
-<<<<<<< HEAD
-                cache_pull_report = File.join(@ws.root_dir, 'cache-pull.json')
-                cache_report = if File.file?(cache_pull_report)
-                    JSON.load(File.read(cache_pull_report))
-                else
-                    {}
-                end
-
-                reports = { @ws.import_report_path => 'import_report',
-                            @ws.build_report_path  => 'build_report',
-                            @ws.utility_report_path('test') => ['test_report', 'test'] }
-
-                packages = reports.map do |path, (toplevel, new_toplevel)|
-                    next({}) unless File.file?(path)
-
-                    report = JSON.load(File.read(path))
-                    [report[toplevel]['packages'], new_toplevel]
-                end
-
-                result = cache_report.dup
-                packages.each do |set, new_toplevel|
-                    set.each do |info|
-                        name = info.delete('name')
-                        result[name] ||= {}
-
-                        target =
-                            if new_toplevel
-                                result[name][new_toplevel] ||= {}
-                            else
-                                result[name]
-                            end
-                        target.merge!(info)
-                    end
-                end
-
-                result.each_value do |pkg_info|
-                    pkg_info['cached'] ||= false
-                end
-
-=======
                 # NOTE: keys must match PHASES
                 new_reports = {
                     'import' => @ws.import_report_path,
@@ -388,7 +302,6 @@ module Autoproj
                         end
                     end
                 end
->>>>>>> ef3f4c1a092a1186e35a022c82be46174e2a29b4
                 { 'packages' => result }
             end
         end
