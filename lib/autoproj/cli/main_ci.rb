@@ -164,7 +164,7 @@ module Autoproj
                 Autoproj.report(silent: true) do
                     cli = CI.new
                     args, options = cli.validate_options(path, self.options)
-                    cli.create_report(*args, **options)
+                    cli.create_report(*args)
                 end
             end
         end
